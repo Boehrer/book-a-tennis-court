@@ -5,9 +5,10 @@ tennis courts.
 from time import sleep
 from datetime import datetime, timedelta
 
+import os
+
 import pytz
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -27,7 +28,6 @@ from secrets import (
 )
 
 
-CHROME_DRIVER_PATH = "/usr/local/bin/chromedriver"
 ROWS_XPATH = '//*[@role="grid"]//*[@role="row"]'
 SIGN_IN_PAGE_XPATH = '//a[@class="reservation-quick__signin-now-link"]'
 SIGN_IN_BUTTON_XPATH = '//div[@class="signin__action"]/button'
@@ -53,15 +53,17 @@ VALID_HOUR_UPPER_BOUND = 22
 TIMEOUT_SECONDS = 60
 DAYS_IN_ADVANCE = 6
 TENNIS_COURT = "Tennis Ct"
-ACCEPTABLE_HOURS = [18, 19, 20]
+ACCEPTABLE_HOURS = [int(h) for h in os.environ.get("ACCEPTABLE_HOURS", "18,19,20").split(",")]
 
 
 def get_driver() -> webdriver.Chrome:
     chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument("--start-maximized")
-    chrome_options.add_argument("--disable-extensions")
-    service = Service(CHROME_DRIVER_PATH)
-    return webdriver.Chrome(service=service, options=chrome_options)
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    return webdriver.Chrome(options=chrome_options)
 
 
 class Cell:
