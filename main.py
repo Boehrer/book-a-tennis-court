@@ -209,4 +209,4 @@ if __name__ == "__main__":
     pay_button = driver.find_element(
         By.XPATH, PAY_BUTTON_XPATH
     )
-    # pay_button.click()
+    pay_button.click()
