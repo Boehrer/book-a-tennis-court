@@ -58,9 +58,10 @@ resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_job.tennis_court.name
-  role     = "roles/run.invoker"
+  role     = "roles/run.jobsExecutorWithOverrides"
   member   = "serviceAccount:${google_service_account.scheduler.email}"
 }
+
 
 resource "google_cloud_run_v2_job" "tennis_court" {
   name                = "book-tennis-court"
@@ -74,6 +75,7 @@ resource "google_cloud_run_v2_job" "tennis_court" {
       max_retries     = 0
 
       containers {
+        name  = "book-a-tennis-court"
         image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.registry_id}/book-a-tennis-court"
 
         env {
@@ -172,7 +174,7 @@ resource "google_cloud_scheduler_job" "tennis_court" {
   name      = "book-tennis-court-daily"
   project   = var.project_id
   region    = var.region
-  schedule  = "0 7 * * 0"
+  schedule  = "0 7 * * 1"
   time_zone = "America/Chicago"
 
   http_target {
@@ -181,7 +183,8 @@ resource "google_cloud_scheduler_job" "tennis_court" {
     body        = base64encode(jsonencode({
       overrides = {
         containerOverrides = [{
-          env = [{ name = "ACCEPTABLE_HOURS", value = "13,14,15" }]
+          name = "book-a-tennis-court"
+          env  = [{ name = "ACCEPTABLE_HOURS", value = "13,14,15" }]
         }]
       }
     }))
