@@ -174,7 +174,7 @@ resource "google_cloud_scheduler_job" "tennis_court" {
   name      = "book-tennis-court-daily"
   project   = var.project_id
   region    = var.region
-  schedule  = "58 6 * * 3"
+  schedule  = "57 6 * * 3"
   time_zone = "America/Chicago"
 
   http_target {
