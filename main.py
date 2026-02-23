@@ -216,3 +216,4 @@ if __name__ == "__main__":
         By.XPATH, PAY_BUTTON_XPATH
     )
     pay_button.click()
+    print(f"pay button clicked at {datetime.now(pytz.timezone('America/Chicago'))}")
