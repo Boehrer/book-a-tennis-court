@@ -133,6 +133,12 @@ if __name__ == "__main__":
     email_input_element.send_keys(EMAIL_ADDRESS)
     password_input_element.send_keys(PASSWORD)
     sign_in_button = driver.find_element(By.XPATH, SIGN_IN_BUTTON_XPATH)
+    now = datetime.now(pytz.timezone("America/Chicago"))
+    target = now.replace(hour=7, minute=0, second=0, microsecond=0)
+    if now < target:
+        seconds = (target - now).total_seconds()
+        print(f"sleeping for {seconds:.1f} seconds")
+        sleep(seconds)
     sign_in_button.click()
     # select six days in advance
     calendar_input = WebDriverWait(driver, TIMEOUT_SECONDS).until(
