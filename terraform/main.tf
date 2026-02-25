@@ -174,7 +174,7 @@ resource "google_cloud_scheduler_job" "tennis_court" {
   name      = "book-tennis-court-daily"
   project   = var.project_id
   region    = var.region
-  schedule  = "57 6 * * 3"
+  schedule  = "57 6 * * 3,4,5"
   time_zone = "America/Chicago"
 
   http_target {
@@ -184,7 +184,7 @@ resource "google_cloud_scheduler_job" "tennis_court" {
       overrides = {
         containerOverrides = [{
           name = "book-a-tennis-court"
-          env  = [{ name = "ACCEPTABLE_HOURS", value = "19,20" }]
+          env  = [{ name = "ACCEPTABLE_HOURS", value = "18,19,20,21" }]
         }]
       }
     }))
