@@ -3,7 +3,7 @@ This module contains a script which uses selenium to automatically book
 tennis courts.
 """
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import os
 
@@ -54,6 +54,7 @@ TIMEOUT_SECONDS = 60
 DAYS_IN_ADVANCE = 6
 TENNIS_COURT = "Tennis Ct"
 ACCEPTABLE_HOURS = [int(h) for h in os.environ.get("ACCEPTABLE_HOURS", "18,19,20").split(",")]
+RETRIES = int(os.environ.get("RETRIES", "30"))
 
 
 def get_driver() -> webdriver.Chrome:
@@ -82,7 +83,7 @@ class Row:
             './/div[@class="resource-header-cell__name"]/span'
         ).text
 
-    def get_cells(self) -> list[WebElement]:
+    def get_cells(self) -> list[Cell]:
         return [Cell(e) for e in self.element.find_elements(By.XPATH, './td')]
 
 
@@ -107,15 +108,42 @@ class Table:
         for row in rows:
             cells = row.get_cells()
             for hour in acceptable_hours:
-                cell_index = hour - 6
+                cell_index = hour - VALID_HOUR_LOWER_BOUND
                 cell = cells[cell_index]
                 if cell.is_available():
                     available_courts.append(cell)
         return available_courts
 
 
+def select_date_and_wait_for_grid(
+    driver: webdriver.Chrome,
+    desired_date: date,
+    current_date: date,
+) -> None:
+    calendar_input = WebDriverWait(driver, TIMEOUT_SECONDS).until(
+        EC.element_to_be_clickable((By.XPATH, CALENDAR_INPUT_XPATH))
+    )
+    calendar_input.click()
+    if desired_date.month != current_date.month:
+        next_month_button = WebDriverWait(driver, TIMEOUT_SECONDS).until(
+            EC.element_to_be_clickable((By.XPATH, NEXT_MONTH_BUTTON_XPATH))
+        )
+        next_month_button.click()
+    day_of_month_element = WebDriverWait(driver, TIMEOUT_SECONDS).until(
+        EC.element_to_be_clickable((
+            By.XPATH,
+            DATE_XPATH_TEMPLATE.format(day_of_month=desired_date.day),
+        ))
+    )
+    day_of_month_element.click()
+    WebDriverWait(driver, TIMEOUT_SECONDS).until(
+        EC.presence_of_element_located((By.XPATH, ROWS_XPATH))
+    )
+
+
 if __name__ == "__main__":
-    current_date = datetime.now(pytz.timezone("America/Chicago")).date()
+    now = datetime.now(pytz.timezone("America/Chicago"))
+    current_date = now.date()
     desired_date = current_date + timedelta(days=DAYS_IN_ADVANCE)
     driver = get_driver()
     driver.get(URL)
@@ -133,36 +161,25 @@ if __name__ == "__main__":
     email_input_element.send_keys(EMAIL_ADDRESS)
     password_input_element.send_keys(PASSWORD)
     sign_in_button = driver.find_element(By.XPATH, SIGN_IN_BUTTON_XPATH)
-    now = datetime.now(pytz.timezone("America/Chicago"))
     target = now.replace(hour=7, minute=0, second=0, microsecond=0)
     if now < target:
         seconds = (target - now).total_seconds()
         print(f"sleeping for {seconds:.1f} seconds")
         sleep(seconds)
     sign_in_button.click()
-    # select six days in advance
-    calendar_input = WebDriverWait(driver, TIMEOUT_SECONDS).until(
-        EC.element_to_be_clickable((By.XPATH, CALENDAR_INPUT_XPATH))
-    )
-    calendar_input.click()
-    if desired_date.month != current_date.month:
-        next_month_button = WebDriverWait(driver, TIMEOUT_SECONDS).until(
-            EC.element_to_be_clickable((By.XPATH, NEXT_MONTH_BUTTON_XPATH))
-        )
-        next_month_button.click()
-    day_of_month_element = WebDriverWait(driver, TIMEOUT_SECONDS).until(
-        EC.element_to_be_clickable((By.XPATH, DATE_XPATH_TEMPLATE.format(day_of_month=desired_date.day)))
-    )
-    day_of_month_element.click()
-    # select available courts
-    WebDriverWait(driver, TIMEOUT_SECONDS).until(
-        EC.presence_of_element_located((By.XPATH, ROWS_XPATH))
-    )
-    available_courts = Table(driver).find_available_courts(ACCEPTABLE_HOURS)
-    try:
-        best_court = available_courts[0]
-    except IndexError:
+    # select six days in advance, then retry finding available courts up to 30 times
+    select_date_and_wait_for_grid(driver, desired_date, current_date)
+    available_courts = []
+    for attempt in range(30):
+        available_courts = Table(driver).find_available_courts(ACCEPTABLE_HOURS)
+        if available_courts:
+            break
+        if attempt < 29:
+            driver.refresh()
+            select_date_and_wait_for_grid(driver, desired_date, current_date)
+    if not available_courts:
         raise RuntimeError("no acceptable court available")
+    best_court = available_courts[0]
     best_court.element.click()
     event_name_input_element = driver.find_element(
         By.XPATH, EVENT_NAME_INPUT_XPATH
