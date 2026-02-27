@@ -78,6 +78,13 @@ resource "google_cloud_run_v2_job" "tennis_court" {
         name  = "book-a-tennis-court"
         image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.registry_id}/book-a-tennis-court"
 
+        resources {
+          limits = {
+            memory = "1Gi"
+            cpu    = "1"
+          }
+        }
+
         env {
           name  = "ACCEPTABLE_HOURS"
           value = "19,20"
@@ -185,6 +192,37 @@ resource "google_cloud_scheduler_job" "tennis_court" {
         containerOverrides = [{
           name = "book-a-tennis-court"
           env  = [{ name = "ACCEPTABLE_HOURS", value = "18,19,20,21" }]
+        }]
+      }
+    }))
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  depends_on = [google_project_service.cloudscheduler]
+}
+
+resource "google_cloud_scheduler_job" "tennis_court_weekend" {
+  name      = "book-tennis-court-weekend"
+  project   = var.project_id
+  region    = var.region
+  schedule  = "57 6 * * 0,1"
+  time_zone = "America/Chicago"
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/book-tennis-court:run"
+    body        = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [{
+          name = "book-a-tennis-court"
+          env  = [{ name = "ACCEPTABLE_HOURS", value = "13,14,15,16,17,18,19" }]
         }]
       }
     }))
