@@ -9,11 +9,13 @@ import os
 
 import pytz
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.ui import Select
+from webdriver_manager.chrome import ChromeDriverManager
 
 from secrets import (
     EMAIL_ADDRESS,
@@ -39,6 +41,9 @@ DATE_XPATH_TEMPLATE = '//tr[@class="an-calendar-table-row"]//div[text()="{day_of
 EVENT_NAME_INPUT_XPATH = '//input[@data-qa-id="quick-reservation-eventType-name"]'
 CONFIRM_BUTTON_XPATH = '//button[@data-qa-id="quick-reservation-ok-button"]'
 RESERVE_BUTTON_XPATH = '//button[@data-qa-id="quick-reservation-reserve-button"]'
+DISCLAIMER_CLOSE_BUTTON_XPATH = '//button[@data-qa-id="disclaimer-close-btn"]'
+POPUP_CHECKBOX_XPATH = '//input[@data-qa-id="disclaimer-checkbox-18"]'
+DISCLAIMER_SAVE_BUTTON_XPATH = '//button[@type="submit" and .//span[text()="Save"]]'
 PAYMENT_IFRAME_XPATH = '//div[@class="module-checkout"]//iframe'
 CARD_HOLDER_INPUT_XPATH = '//input[@name="holderName"]'
 CARD_NUMBER_INPUT_XPATH = '//input[@name="cardNumber"]'
@@ -54,17 +59,17 @@ TIMEOUT_SECONDS = 60
 DAYS_IN_ADVANCE = 6
 TENNIS_COURT = "Tennis Ct"
 ACCEPTABLE_HOURS = [int(h) for h in os.environ.get("ACCEPTABLE_HOURS", "18,19,20").split(",")]
-RETRIES = int(os.environ.get("RETRIES", "30"))
-
+RETRIES = 3
 
 def get_driver() -> webdriver.Chrome:
+    
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
-    return webdriver.Chrome(options=chrome_options)
+    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
 
 class Cell:
@@ -106,7 +111,10 @@ class Table:
         ]
         available_courts = []
         for row in rows:
+            print(f"resource: {row.resource}")
             cells = row.get_cells()
+            for cell in cells:
+                print(f"cells: {cell.element.get_attribute('class')}")
             for hour in acceptable_hours:
                 cell_index = hour - VALID_HOUR_LOWER_BOUND
                 cell = cells[cell_index]
@@ -139,6 +147,9 @@ def select_date_and_wait_for_grid(
     WebDriverWait(driver, TIMEOUT_SECONDS).until(
         EC.presence_of_element_located((By.XPATH, ROWS_XPATH))
     )
+    # The grid renders in two passes: first with all cells disabled, then an
+    # async update reveals available slots. Wait for that update to settle.
+    sleep(2)
 
 
 if __name__ == "__main__":
@@ -167,14 +178,15 @@ if __name__ == "__main__":
         print(f"sleeping for {seconds:.1f} seconds")
         sleep(seconds)
     sign_in_button.click()
-    # select six days in advance, then retry finding available courts up to 30 times
+    # select six days in advance
     select_date_and_wait_for_grid(driver, desired_date, current_date)
     available_courts = []
-    for attempt in range(30):
+    for attempt in range(RETRIES + 1):
         available_courts = Table(driver).find_available_courts(ACCEPTABLE_HOURS)
         if available_courts:
             break
-        if attempt < 29:
+        if attempt < RETRIES:
+            sleep(5)
             driver.refresh()
             select_date_and_wait_for_grid(driver, desired_date, current_date)
     if not available_courts:
@@ -189,6 +201,18 @@ if __name__ == "__main__":
         EC.element_to_be_clickable((By.XPATH, CONFIRM_BUTTON_XPATH))
     )
     confirm_button.click()
+    disclaimer_close_button = WebDriverWait(driver, TIMEOUT_SECONDS).until(
+        EC.presence_of_element_located((By.XPATH, DISCLAIMER_CLOSE_BUTTON_XPATH))
+    )
+    driver.execute_script("arguments[0].click();", disclaimer_close_button)
+    popup_checkbox = WebDriverWait(driver, TIMEOUT_SECONDS).until(
+        EC.presence_of_element_located((By.XPATH, POPUP_CHECKBOX_XPATH))
+    )
+    driver.execute_script("arguments[0].click();", popup_checkbox)
+    disclaimer_save_button = WebDriverWait(driver, TIMEOUT_SECONDS).until(
+        EC.presence_of_element_located((By.XPATH, DISCLAIMER_SAVE_BUTTON_XPATH))
+    )
+    driver.execute_script("arguments[0].click();", disclaimer_save_button)
     reserve_button = WebDriverWait(driver, TIMEOUT_SECONDS).until(
         EC.element_to_be_clickable((By.XPATH, RESERVE_BUTTON_XPATH))
     )
@@ -199,7 +223,7 @@ if __name__ == "__main__":
     )
     driver.switch_to.frame(iframe_element)
     card_holder_input_element = WebDriverWait(driver, TIMEOUT_SECONDS).until(
-        EC.presence_of_element_located((By.XPATH, CARD_HOLDER_INPUT_XPATH))
+        EC.element_to_be_clickable((By.XPATH, CARD_HOLDER_INPUT_XPATH))
     )
     card_holder_input_element.send_keys(CARD_HOLDER)
     card_number_input_element = driver.find_element(
