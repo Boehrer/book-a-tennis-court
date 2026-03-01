@@ -111,10 +111,7 @@ class Table:
         ]
         available_courts = []
         for row in rows:
-            print(f"resource: {row.resource}")
             cells = row.get_cells()
-            for cell in cells:
-                print(f"cells: {cell.element.get_attribute('class')}")
             for hour in acceptable_hours:
                 cell_index = hour - VALID_HOUR_LOWER_BOUND
                 cell = cells[cell_index]
